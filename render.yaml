@@ -24,3 +24,11 @@ services:
         sync: false
       - key: EPPO_API_KEY
         sync: false
+      - key: EARTHDATA_USERNAME
+        sync: false
+      - key: EARTHDATA_PASSWORD
+        sync: false
+      - key: AGROMONITORING_API_KEY
+        sync: false
+      - key: YANDEX_WEATHER_API_KEY
+        sync: false
