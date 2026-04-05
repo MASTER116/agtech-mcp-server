@@ -13,4 +13,7 @@ COPY package*.json ./
 RUN npm ci --omit=dev
 COPY --from=builder /app/dist ./dist
 USER mcp
+ENV TRANSPORT=http
+ENV PORT=3000
+EXPOSE 3000
 ENTRYPOINT ["node", "dist/index.js"]

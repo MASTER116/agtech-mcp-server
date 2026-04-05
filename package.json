@@ -11,6 +11,7 @@
     "build": "tsc",
     "dev": "tsx src/index.ts",
     "start": "node dist/index.js",
+    "start:http": "TRANSPORT=http node dist/index.js",
     "test": "vitest run",
     "test:live": "vitest run tests/live/ --reporter=verbose",
     "lint": "tsc --noEmit"

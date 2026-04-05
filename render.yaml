@@ -1,0 +1,26 @@
+services:
+  - type: web
+    name: agtech-mcp-server
+    runtime: node
+    plan: free
+    buildCommand: npm ci && npm run build
+    startCommand: npm run start:http
+    envVars:
+      - key: PORT
+        value: "10000"
+      - key: TRANSPORT
+        value: http
+      - key: NODE_ENV
+        value: production
+      - key: NASS_API_KEY
+        sync: false
+      - key: NOAA_TOKEN
+        sync: false
+      - key: SENTINEL_CLIENT_ID
+        sync: false
+      - key: SENTINEL_CLIENT_SECRET
+        sync: false
+      - key: PLANTNET_API_KEY
+        sync: false
+      - key: EPPO_API_KEY
+        sync: false
