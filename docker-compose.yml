@@ -1,0 +1,17 @@
+version: "3.8"
+services:
+  agtech-mcp:
+    build: .
+    stdin_open: true
+    tty: true
+    environment:
+      - NASS_API_KEY=${NASS_API_KEY:-}
+      - NOAA_TOKEN=${NOAA_TOKEN:-}
+      - SENTINEL_CLIENT_ID=${SENTINEL_CLIENT_ID:-}
+      - SENTINEL_CLIENT_SECRET=${SENTINEL_CLIENT_SECRET:-}
+      - EARTHDATA_USERNAME=${EARTHDATA_USERNAME:-}
+      - EARTHDATA_PASSWORD=${EARTHDATA_PASSWORD:-}
+      - PLANTNET_API_KEY=${PLANTNET_API_KEY:-}
+      - EPPO_API_KEY=${EPPO_API_KEY:-}
+      - AGROMONITORING_API_KEY=${AGROMONITORING_API_KEY:-}
+      - YANDEX_WEATHER_API_KEY=${YANDEX_WEATHER_API_KEY:-}

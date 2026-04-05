@@ -1,0 +1,39 @@
+name: agtech-mcp-server
+description: "Production-grade MCP server for agricultural data integration — weather, soil, satellite imagery, crop statistics across 14+ APIs (Open-Meteo, SoilGrids, FAOSTAT, Sentinel Hub, USDA NASS, and more)"
+startCommand:
+  type: stdio
+  configSchema:
+    type: object
+    properties:
+      NASS_API_KEY:
+        type: string
+        description: "USDA NASS QuickStats API key"
+      NOAA_TOKEN:
+        type: string
+        description: "NOAA Climate Data Online token"
+      SENTINEL_CLIENT_ID:
+        type: string
+        description: "Copernicus Data Space client ID"
+      SENTINEL_CLIENT_SECRET:
+        type: string
+        description: "Copernicus Data Space client secret"
+      EARTHDATA_USERNAME:
+        type: string
+        description: "NASA Earthdata username"
+      EARTHDATA_PASSWORD:
+        type: string
+        description: "NASA Earthdata password"
+      PLANTNET_API_KEY:
+        type: string
+        description: "Pl@ntNet API key"
+      EPPO_API_KEY:
+        type: string
+        description: "EPPO Data Portal API key"
+      AGROMONITORING_API_KEY:
+        type: string
+        description: "Agromonitoring (OpenWeatherMap) API key"
+      YANDEX_WEATHER_API_KEY:
+        type: string
+        description: "Yandex Weather API key"
+  commandFunction: |
+    (config) => ({ command: "npx", args: ["-y", "agtech-mcp-server"], env: config })

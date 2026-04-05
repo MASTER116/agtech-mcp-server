@@ -1,0 +1,54 @@
+{
+  "name": "agtech-mcp-server",
+  "version": "1.0.0",
+  "description": "Production-grade MCP server for agricultural data integration — weather, soil, satellite imagery, crop statistics across 14+ APIs",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "agtech-mcp-server": "dist/index.js"
+  },
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/index.ts",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:live": "vitest run tests/live/ --reporter=verbose",
+    "lint": "tsc --noEmit"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "agriculture",
+    "agtech",
+    "weather",
+    "soil",
+    "ndvi",
+    "satellite",
+    "farming",
+    "crop",
+    "open-meteo",
+    "soilgrids",
+    "faostat",
+    "sentinel-hub"
+  ],
+  "author": "Azat Khaliafiev",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/MASTER116/agtech-mcp-server.git"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "dotenv": "^16.4.7",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.0"
+  }
+}
