@@ -1,0 +1,860 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ═══════════════════════════════════════════════
+// MULTI-TENANT CORE
+// ═══════════════════════════════════════════════
+
+model Organization {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  description String?
+  logoUrl     String?
+  timezone    String   @default("Europe/Moscow")
+  locale      String   @default("ru")
+  apiKey      String?  @unique
+  centerLat   Float?
+  centerLon   Float?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  members     OrgMember[]
+  equipment   Equipment[]
+  fields      Field[]
+  activities  Activity[]
+  sensors     Sensor[]
+  listings    MarketplaceListing[]
+  maintenance MaintenanceRecord[]
+  invitations Invitation[]
+}
+
+enum OrgRole {
+  OWNER
+  MANAGER
+  OPERATOR
+  VIEWER
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  name          String
+  phone         String?
+  avatarUrl     String?
+  locale        String    @default("ru")
+  emailVerified DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  memberships        OrgMember[]
+  assignedActivities Activity[] @relation("AssignedOperator")
+}
+
+model OrgMember {
+  id       String   @id @default(cuid())
+  userId   String
+  orgId    String
+  role     OrgRole  @default(OPERATOR)
+  joinedAt DateTime @default(now())
+
+  user User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  org  Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, orgId])
+  @@index([orgId])
+}
+
+model Invitation {
+  id        String   @id @default(cuid())
+  orgId     String
+  email     String
+  role      OrgRole  @default(OPERATOR)
+  token     String   @unique @default(cuid())
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  org Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+
+  @@index([token])
+}
+
+// ═══════════════════════════════════════════════
+// FLEET / EQUIPMENT
+// ═══════════════════════════════════════════════
+
+enum EquipmentStatus {
+  ACTIVE
+  IDLE
+  MAINTENANCE
+  DECOMMISSIONED
+}
+
+enum EquipmentCategory {
+  TRACTOR
+  GRAIN_COMBINE
+  FORAGE_COMBINE
+  SPRAYER
+  SEEDER
+  CULTIVATOR
+  PLOW
+  HARROW
+  TRUCK
+  TRAILER
+  GRAIN_DRYER
+  FERTILIZER_SPREADER
+  LOADER
+  BULLDOZER
+  DRONE
+  OTHER
+}
+
+model Equipment {
+  id             String            @id @default(cuid())
+  orgId          String
+  name           String
+  category       EquipmentCategory
+  make           String?
+  model          String?
+  year           Int?
+  serialNumber   String?
+  registrationNo String?
+  status         EquipmentStatus   @default(IDLE)
+  fuelType       String?
+  engineHours    Float?
+  purchasePrice  Float?
+  photoUrl       String?
+  notes          String?
+  latitude       Float?
+  longitude      Float?
+  lastPositionAt DateTime?
+  telematicsId   String?           @unique
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  org             Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  activities      ActivityEquipment[]
+  positionHistory EquipmentPosition[]
+  maintenance     MaintenanceRecord[]
+  listings        MarketplaceListing[]
+
+  @@index([orgId])
+  @@index([status])
+}
+
+model EquipmentPosition {
+  id          String   @id @default(cuid())
+  equipmentId String
+  latitude    Float
+  longitude   Float
+  altitude    Float?
+  speed       Float?
+  heading     Float?
+  engineOn    Boolean?
+  fuelLevel   Float?
+  recordedAt  DateTime
+
+  equipment Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+
+  @@index([equipmentId, recordedAt])
+}
+
+// ═══════════════════════════════════════════════
+// FIELDS & CROPS
+// ═══════════════════════════════════════════════
+
+model Field {
+  id        String   @id @default(cuid())
+  orgId     String
+  name      String
+  areaHa    Float
+  boundary  Json
+  centerLat Float
+  centerLon Float
+  soilType  String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  org         Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  cropSeasons CropSeason[]
+  activities  Activity[]
+  sensors     Sensor[]
+
+  @@index([orgId])
+}
+
+model CropSeason {
+  id                String    @id @default(cuid())
+  fieldId           String
+  cropName          String
+  variety           String?
+  seasonYear        Int
+  plantedAt         DateTime?
+  harvestedAt       DateTime?
+  yieldKgHa         Float?
+  expectedYieldKgHa Float?
+  notes             String?
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+
+  field Field @relation(fields: [fieldId], references: [id], onDelete: Cascade)
+
+  @@index([fieldId, seasonYear])
+}
+
+// ═══════════════════════════════════════════════
+// ACTIVITIES / TASKS
+// ═══════════════════════════════════════════════
+
+enum ActivityType {
+  PLOWING
+  CULTIVATION
+  SEEDING
+  FERTILIZING
+  SPRAYING
+  IRRIGATION
+  HARVESTING
+  TRANSPORT
+  SCOUTING
+  SOIL_SAMPLING
+  MAINTENANCE_TASK
+  OTHER
+}
+
+enum ActivityStatus {
+  PLANNED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+  OVERDUE
+}
+
+model Activity {
+  id             String         @id @default(cuid())
+  orgId          String
+  fieldId        String?
+  type           ActivityType
+  status         ActivityStatus @default(PLANNED)
+  title          String
+  description    String?
+  plannedStartAt DateTime
+  plannedEndAt   DateTime
+  actualStartAt  DateTime?
+  actualEndAt    DateTime?
+  assignedToId   String?
+  inputProduct   String?
+  inputRateKgHa  Float?
+  inputTotalKg   Float?
+  estimatedCost  Float?
+  actualCost     Float?
+  notes          String?
+  weatherMinTemp Float?
+  weatherMaxWind Float?
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  org        Organization        @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  field      Field?              @relation(fields: [fieldId], references: [id])
+  assignedTo User?               @relation("AssignedOperator", fields: [assignedToId], references: [id])
+  equipment  ActivityEquipment[]
+
+  @@index([orgId, status])
+  @@index([fieldId])
+  @@index([plannedStartAt])
+}
+
+model ActivityEquipment {
+  id          String @id @default(cuid())
+  activityId  String
+  equipmentId String
+
+  activity  Activity  @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  equipment Equipment @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+
+  @@unique([activityId, equipmentId])
+}
+
+// ═══════════════════════════════════════════════
+// SENSORS
+// ═══════════════════════════════════════════════
+
+enum SensorType {
+  SOIL_MOISTURE
+  SOIL_TEMPERATURE
+  AIR_TEMPERATURE
+  AIR_HUMIDITY
+  RAINFALL
+  WIND_SPEED
+  FERTILIZER_DEPTH
+  PH_METER
+  LIGHT
+  LEAF_WETNESS
+  OTHER
+}
+
+model Sensor {
+  id         String     @id @default(cuid())
+  orgId      String
+  fieldId    String?
+  deviceId   String     @unique
+  name       String
+  type       SensorType
+  unit       String
+  latitude   Float?
+  longitude  Float?
+  isOnline   Boolean    @default(false)
+  lastReadAt DateTime?
+  batteryPct Float?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  org      Organization   @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  field    Field?         @relation(fields: [fieldId], references: [id])
+  readings SensorReading[]
+
+  @@index([orgId])
+  @@index([deviceId])
+}
+
+model SensorReading {
+  id         String   @id @default(cuid())
+  sensorId   String
+  value      Float
+  metadata   Json?
+  recordedAt DateTime
+
+  sensor Sensor @relation(fields: [sensorId], references: [id], onDelete: Cascade)
+
+  @@index([sensorId, recordedAt])
+}
+
+// ═══════════════════════════════════════════════
+// MARKETPLACE
+// ═══════════════════════════════════════════════
+
+enum ListingStatus {
+  DRAFT
+  ACTIVE
+  RESERVED
+  COMPLETED
+  CANCELLED
+}
+
+enum ListingType {
+  RENTAL
+  SERVICE
+  SALE
+}
+
+model MarketplaceListing {
+  id             String        @id @default(cuid())
+  orgId          String
+  equipmentId    String?
+  type           ListingType
+  status         ListingStatus @default(DRAFT)
+  title          String
+  description    String?
+  pricePerDay    Float?
+  pricePerHour   Float?
+  pricePerHa     Float?
+  suggestedPrice Float?
+  currency       String        @default("RUB")
+  availableFrom  DateTime
+  availableTo    DateTime
+  regionName     String?
+  latitude       Float?
+  longitude      Float?
+  radiusKm       Float?
+  photoUrls      Json?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  org       Organization       @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  equipment Equipment?         @relation(fields: [equipmentId], references: [id])
+  bookings  MarketplaceBooking[]
+
+  @@index([orgId])
+  @@index([status, type])
+  @@index([availableFrom, availableTo])
+}
+
+model MarketplaceBooking {
+  id          String   @id @default(cuid())
+  listingId   String
+  renterOrgId String
+  status      String   @default("pending")
+  startDate   DateTime
+  endDate     DateTime
+  totalPrice  Float
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  listing MarketplaceListing @relation(fields: [listingId], references: [id], onDelete: Cascade)
+
+  @@index([listingId])
+  @@index([renterOrgId])
+}
+
+// ═══════════════════════════════════════════════
+// MAINTENANCE
+// ═══════════════════════════════════════════════
+
+enum MaintenanceType {
+  SCHEDULED
+  UNSCHEDULED
+  EMERGENCY
+  INSPECTION
+}
+
+model MaintenanceRecord {
+  id                   String          @id @default(cuid())
+  orgId                String
+  equipmentId          String
+  type                 MaintenanceType
+  title                String
+  description          String?
+  scheduledAt          DateTime?
+  completedAt          DateTime?
+  cost                 Float?
+  partsUsed            Json?
+  engineHoursAtService Float?
+  nextServiceAt        DateTime?
+  nextServiceHours     Float?
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  org       Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  equipment Equipment    @relation(fields: [equipmentId], references: [id], onDelete: Cascade)
+
+  @@index([orgId])
+  @@index([equipmentId])
+}
+
+model Supplier {
+  id        String   @id @default(cuid())
+  name      String
+  category  String
+  website   String?
+  phone     String?
+  email     String?
+  address   String?
+  latitude  Float?
+  longitude Float?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products SupplierProduct[]
+}
+
+model SupplierProduct {
+  id          String  @id @default(cuid())
+  supplierId  String
+  name        String
+  sku         String?
+  category    String
+  price       Float?
+  currency    String  @default("RUB")
+  unit        String?
+  description String?
+  inStock     Boolean @default(true)
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+
+  @@index([supplierId])
+}
+
+// ═══════════════════════════════════════════════
+// УЧЁТ ГСМ + ПУТЕВЫЕ ЛИСТЫ
+// ═══════════════════════════════════════════════
+
+model FuelRecord {
+  id          String   @id @default(cuid())
+  orgId       String
+  equipmentId String
+  activityId  String?
+  type        String   // "refuel", "consumption"
+  liters      Float
+  costPerLiter Float?
+  totalCost   Float?
+  fuelType    String   @default("diesel") // diesel, gasoline, gas
+  odometer    Float?   // Пробег (для грузовиков)
+  engineHours Float?   // Моточасы на момент записи
+  location    String?
+  operatorId  String?
+  notes       String?
+  recordedAt  DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([orgId, equipmentId])
+  @@index([recordedAt])
+}
+
+model Waybill {
+  id            String   @id @default(cuid())
+  orgId         String
+  equipmentId   String
+  operatorId    String
+  number        String   // Номер путевого листа
+  date          DateTime
+  departureTime DateTime?
+  returnTime    DateTime?
+  routeFrom     String?
+  routeTo       String?
+  distanceKm    Float?
+  fuelStart     Float?   // Остаток ГСМ на выезде
+  fuelEnd       Float?   // Остаток на возвращении
+  fuelIssued    Float?   // Выдано топлива
+  fuelConsumed  Float?   // Фактический расход
+  fuelNorm      Float?   // Нормативный расход
+  cargoDesc     String?  // Описание груза
+  cargoWeight   Float?   // Масса груза, т
+  status        String   @default("open") // open, closed
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  @@index([orgId])
+  @@index([date])
+}
+
+// ═══════════════════════════════════════════════
+// СЕВООБОРОТ
+// ═══════════════════════════════════════════════
+
+model CropRotationPlan {
+  id        String   @id @default(cuid())
+  orgId     String
+  fieldId   String
+  year      Int
+  cropName  String
+  variety   String?
+  predecessor String? // Предшественник (культура предыдущего года)
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([fieldId, year])
+  @@index([orgId])
+}
+
+// ═══════════════════════════════════════════════
+// КАЧЕСТВО УРОЖАЯ
+// ═══════════════════════════════════════════════
+
+model HarvestQuality {
+  id           String   @id @default(cuid())
+  orgId        String
+  fieldId      String
+  cropSeasonId String?
+  sampleDate   DateTime
+  moisture     Float?   // Влажность, %
+  impurity     Float?   // Засорённость, %
+  gluten       Float?   // Клейковина, % (пшеница)
+  protein      Float?   // Протеин, %
+  oilContent   Float?   // Масличность, % (подсолнечник, рапс)
+  testWeight   Float?   // Натура, г/л
+  gradeClass   String?  // Класс зерна (1-5)
+  fallingNumber Float?  // Число падения, с
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  @@index([orgId, fieldId])
+}
+
+// ═══════════════════════════════════════════════
+// ЖУРНАЛ ПРИМЕНЕНИЯ СЗР (ПЕСТИЦИДЫ)
+// ═══════════════════════════════════════════════
+
+model PesticideJournal {
+  id            String   @id @default(cuid())
+  orgId         String
+  fieldId       String
+  activityId    String?
+  date          DateTime
+  productName   String   // Название препарата
+  activeIngredient String? // Действующее вещество
+  regNumber     String?  // Регистрационный номер
+  applicationRate Float  // Норма расхода, л(кг)/га
+  areaHa        Float    // Обработанная площадь, га
+  totalUsed     Float    // Всего использовано, л(кг)
+  targetPest    String?  // Целевой вредитель/болезнь/сорняк
+  method        String?  // Способ обработки
+  weatherTemp   Float?   // Температура при обработке
+  weatherWind   Float?   // Ветер при обработке
+  operatorId    String?
+  waitingPeriod Int?     // Срок ожидания, дней
+  notes         String?
+  createdAt     DateTime @default(now())
+
+  @@index([orgId, fieldId])
+  @@index([date])
+}
+
+// ═══════════════════════════════════════════════
+// СКЛАД (ВХОДЯЩИЕ РЕСУРСЫ)
+// ═══════════════════════════════════════════════
+
+enum InventoryCategory {
+  SEEDS
+  FERTILIZER
+  PESTICIDE
+  FUEL
+  SPARE_PARTS
+  OTHER_MATERIAL
+}
+
+model InventoryItem {
+  id        String            @id @default(cuid())
+  orgId     String
+  name      String
+  category  InventoryCategory
+  unit      String            // кг, л, шт, т
+  sku       String?
+  minStock  Float?            // Минимальный остаток (для алерта)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+
+  movements InventoryMovement[]
+
+  @@index([orgId, category])
+}
+
+model InventoryMovement {
+  id          String   @id @default(cuid())
+  itemId      String
+  type        String   // "in" (приход), "out" (расход), "adjustment" (инвентаризация)
+  quantity    Float
+  unitCost    Float?
+  totalCost   Float?
+  supplierName String?
+  invoiceNo   String?  // Номер накладной
+  activityId  String?  // Привязка к полевой работе
+  notes       String?
+  recordedAt  DateTime
+  createdAt   DateTime @default(now())
+
+  item InventoryItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([itemId, recordedAt])
+}
+
+// ═══════════════════════════════════════════════
+// БЮДЖЕТ И СЕБЕСТОИМОСТЬ
+// ═══════════════════════════════════════════════
+
+model SeasonBudget {
+  id        String   @id @default(cuid())
+  orgId     String
+  year      Int
+  fieldId   String?  // null = общий бюджет
+  category  String   // seeds, fertilizer, pesticide, fuel, labor, maintenance, other
+  planned   Float    // План, ₽
+  actual    Float    @default(0) // Факт, ₽
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId, year])
+  @@unique([orgId, year, fieldId, category])
+}
+
+// ═══════════════════════════════════════════════
+// ГЕОЗОНЫ
+// ═══════════════════════════════════════════════
+
+model Geofence {
+  id        String   @id @default(cuid())
+  orgId     String
+  name      String
+  boundary  Json     // GeoJSON Polygon
+  type      String   @default("allowed") // allowed, restricted
+  alertOnExit Boolean @default(true)
+  alertOnEntry Boolean @default(false)
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orgId])
+}
+
+model GeofenceAlert {
+  id          String   @id @default(cuid())
+  orgId       String
+  geofenceId  String
+  equipmentId String
+  type        String   // "exit", "entry"
+  latitude    Float
+  longitude   Float
+  message     String?
+  acknowledged Boolean @default(false)
+  triggeredAt DateTime
+  createdAt   DateTime @default(now())
+
+  @@index([orgId, triggeredAt])
+}
+
+// ═══════════════════════════════════════════════
+// ЖУРНАЛ ОПЕРАТОРОВ
+// ═══════════════════════════════════════════════
+
+model OperatorLog {
+  id          String   @id @default(cuid())
+  orgId       String
+  operatorId  String
+  equipmentId String
+  activityId  String?
+  shiftDate   DateTime
+  startTime   DateTime
+  endTime     DateTime?
+  hoursWorked Float?
+  areaWorked  Float?   // га
+  fuelUsed    Float?   // л
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  @@index([orgId, operatorId])
+  @@index([shiftDate])
+}
+
+// ═══════════════════════════════════════════════
+// УЧЁТ ШИН
+// ═══════════════════════════════════════════════
+
+model TireRecord {
+  id          String   @id @default(cuid())
+  orgId       String
+  equipmentId String
+  position    String   // "FL", "FR", "RL", "RR", "spare"
+  brand       String
+  model       String
+  size        String   // "520/85R42"
+  installedAt DateTime
+  removedAt   DateTime?
+  hoursAtInstall Float?
+  hoursAtRemoval Float?
+  reason      String?  // "wear", "damage", "rotation"
+  costRub     Float?
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  @@index([orgId, equipmentId])
+}
+
+// ═══════════════════════════════════════════════
+// СТРАХОВКА ТЕХНИКИ
+// ═══════════════════════════════════════════════
+
+model InsurancePolicy {
+  id          String   @id @default(cuid())
+  orgId       String
+  equipmentId String
+  policyNo    String
+  insurer     String   // Страховая компания
+  type        String   // "ОСАГО", "КАСКО", "ДСАГО", "от_поломки"
+  premium     Float    // Страховая премия, ₽
+  coverage    Float?   // Страховая сумма, ₽
+  startDate   DateTime
+  endDate     DateTime
+  notes       String?
+  createdAt   DateTime @default(now())
+
+  @@index([orgId])
+  @@index([endDate])
+}
+
+// ═══════════════════════════════════════════════
+// УВЕДОМЛЕНИЯ
+// ═══════════════════════════════════════════════
+
+model Notification {
+  id        String   @id @default(cuid())
+  orgId     String
+  userId    String?  // null = всем в организации
+  type      String   // "frost_alert", "maintenance_due", "geofence", "spray_window", "insurance_expiry", "inventory_low"
+  title     String
+  message   String
+  severity  String   @default("info") // info, warning, critical
+  channel   String   @default("app") // app, telegram, sms
+  read      Boolean  @default(false)
+  sentAt    DateTime @default(now())
+  readAt    DateTime?
+  metadata  Json?    // Доп. данные (equipmentId, fieldId, etc.)
+
+  @@index([orgId, userId, read])
+  @@index([sentAt])
+}
+
+// ═══════════════════════════════════════════════
+// ФГИС «ЗЕРНО» (интеграция)
+// ═══════════════════════════════════════════════
+
+model GrainLot {
+  id           String   @id @default(cuid())
+  orgId        String
+  fieldId      String?
+  cropName     String
+  harvestYear  Int
+  weightKg     Float
+  qualityClass String?
+  moisture     Float?
+  sdizNumber   String?  // Номер СДИЗ (товаросопроводительный документ)
+  fgisStatus   String   @default("draft") // draft, submitted, registered, sold
+  buyerName    String?
+  buyerInn     String?
+  salePrice    Float?
+  salePricePerTon Float?
+  notes        String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([orgId, harvestYear])
+}
+
+// ═══════════════════════════════════════════════
+// ИНТЕГРАЦИЯ 1С (очередь обмена)
+// ═══════════════════════════════════════════════
+
+model SyncQueue1C {
+  id         String   @id @default(cuid())
+  orgId      String
+  entityType String   // "fuel_record", "waybill", "inventory", "grain_lot", "expense"
+  entityId   String
+  action     String   // "create", "update", "delete"
+  payload    Json
+  status     String   @default("pending") // pending, sent, confirmed, error
+  errorMsg   String?
+  syncedAt   DateTime?
+  createdAt  DateTime @default(now())
+
+  @@index([orgId, status])
+  @@index([createdAt])
+}
+
+// ═══════════════════════════════════════════════
+// TELEGRAM ИНТЕГРАЦИЯ
+// ═══════════════════════════════════════════════
+
+model TelegramBinding {
+  id         String   @id @default(cuid())
+  orgId      String
+  userId     String
+  chatId     String   @unique // Telegram chat ID
+  username   String?
+  isVerified Boolean  @default(false)
+  notifyMaintenance Boolean @default(true)
+  notifyWeather     Boolean @default(true)
+  notifyGeofence    Boolean @default(true)
+  notifyInventory   Boolean @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([orgId, userId])
+}

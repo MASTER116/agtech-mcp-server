@@ -6,3 +6,10 @@ dist/
 .DS_Store
 Thumbs.db
 agritech-mcp-server/
+.env.local
+platform/.next/
+platform/node_modules/
+platform/.env
+platform/.env.local
+platform/src/generated/
+.claude/
